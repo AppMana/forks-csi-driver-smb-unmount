@@ -100,7 +100,22 @@ func (mounter *winMounter) SMBMount(source, target, fsType string, mountOptions,
 		klog.V(2).Infof("Remote %s not mapped. Mapping now!", remotePath)
 		username := mountOptions[0]
 		password := sensitiveMountOptions[0]
-		if err := smb.NewSmbGlobalMapping(remotePath, username, password); err != nil {
+		err := smb.NewSmbGlobalMapping(remotePath, username, password)
+		if smb.IsCredentialSessionConflict(err) {
+			// Dead mappings that survived a node reboot hold defunct sessions
+			// to the server and can block new mappings with
+			// ERROR_SESSION_CREDENTIAL_CONFLICT. Sweep inaccessible mappings
+			// to the same server and retry once (csi-driver-smb#1007).
+			klog.Warningf("NewSmbGlobalMapping(%s) hit a credential session conflict: %v, removing stale mappings to the same server and retrying", remotePath, err)
+			pathValid := func(path string) (bool, error) {
+				return filesystem.PathValid(context.Background(), path)
+			}
+			if removeErr := smb.RemoveStaleMappingsToServer(remotePath, pathValid); removeErr != nil {
+				klog.Errorf("RemoveStaleMappingsToServer(%s) failed with %v", remotePath, removeErr)
+			}
+			err = smb.NewSmbGlobalMapping(remotePath, username, password)
+		}
+		if err != nil {
 			klog.Errorf("NewSmbGlobalMapping(%s) failed with %v", remotePath, err)
 			return err
 		}

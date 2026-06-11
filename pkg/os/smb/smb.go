@@ -69,6 +69,83 @@ func RemoveSmbGlobalMapping(remotePath string) error {
 	return nil
 }
 
+// IsCredentialSessionConflict reports whether an error from
+// New-SmbGlobalMapping is ERROR_SESSION_CREDENTIAL_CONFLICT (1219): "Multiple
+// connections to a server or shared resource by the same user, using more
+// than one user name, are not allowed". Dead mappings that survived a node
+// reboot can hold defunct sessions to the server and poison new mappings
+// with this error (kubernetes-csi/csi-driver-smb#1007).
+func IsCredentialSessionConflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Multiple connections to a server or shared resource")
+}
+
+// ListSmbGlobalMappingRemotePaths returns the RemotePath of every existing
+// SMB global mapping on the node.
+func ListSmbGlobalMappingRemotePaths() ([]string, error) {
+	cmd := `(Get-SmbGlobalMapping -ErrorAction SilentlyContinue).RemotePath`
+	out, err := util.RunPowershellCmd(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("error listing smb mappings. output: %q, err: %v", string(out), err)
+	}
+	var paths []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			paths = append(paths, line)
+		}
+	}
+	return paths, nil
+}
+
+// SelectStaleMappingsToServer returns the subset of mappings that point at
+// the same \\server as remotePath and are no longer accessible per pathValid.
+// Pure selection logic, kept separate from the powershell calls for testing.
+func SelectStaleMappingsToServer(remotePath string, mappings []string, pathValid func(string) (bool, error)) ([]string, error) {
+	trimmed := strings.TrimPrefix(strings.ReplaceAll(remotePath, "/", `\`), `\\`)
+	server := strings.SplitN(trimmed, `\`, 2)[0]
+	if server == "" {
+		return nil, fmt.Errorf("could not derive server from remote path %q", remotePath)
+	}
+	serverPrefix := strings.ToLower(`\\` + server + `\`)
+
+	var stale []string
+	for _, path := range mappings {
+		if !strings.HasPrefix(strings.ToLower(path), serverPrefix) {
+			continue
+		}
+		if valid, err := pathValid(path); err == nil && valid {
+			continue
+		}
+		stale = append(stale, path)
+	}
+	return stale, nil
+}
+
+// RemoveStaleMappingsToServer removes every SMB global mapping to the same
+// \\server as remotePath whose remote path is no longer accessible. Used to
+// recover from ERROR_SESSION_CREDENTIAL_CONFLICT, where mappings with dead
+// credentials block new mappings to the same server.
+func RemoveStaleMappingsToServer(remotePath string, pathValid func(string) (bool, error)) error {
+	paths, err := ListSmbGlobalMappingRemotePaths()
+	if err != nil {
+		return err
+	}
+	stale, err := SelectStaleMappingsToServer(remotePath, paths, pathValid)
+	if err != nil {
+		return err
+	}
+	var errs []string
+	for _, path := range stale {
+		klog.Warningf("removing stale SMB global mapping %s (same server as %s, no longer accessible)", path, remotePath)
+		if err := RemoveSmbGlobalMapping(path); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to remove stale mappings: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 // GetRemoteServerFromTarget- gets the remote server path given a mount point, the function is recursive until it find the remote server or errors out
 func GetRemoteServerFromTarget(mount string) (string, error) {
 	target, err := os.Readlink(mount)
