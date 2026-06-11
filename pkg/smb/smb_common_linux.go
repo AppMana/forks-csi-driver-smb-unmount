@@ -57,6 +57,13 @@ func Mount(m *mount.SafeFormatAndMount, source, target, fsType string, options, 
 	return m.MountSensitive(source, target, fsType, options, sensitiveMountOptions)
 }
 
+// isStagingTargetStale only applies to Windows, where SMB global mappings can
+// survive a reboot with dead credentials; on Linux the kernel mount table is
+// authoritative and a stale staging dir never reports as mounted.
+func isStagingTargetStale(_ *mount.SafeFormatAndMount, _ string) bool {
+	return false
+}
+
 func CleanupSMBMountPoint(m *mount.SafeFormatAndMount, target string, extensiveMountCheck bool, _ string) error {
 	return mount.CleanupMountPoint(target, m, extensiveMountCheck)
 }

@@ -29,6 +29,11 @@ func Mount(m *mount.SafeFormatAndMount, source, target, fsType string, options [
 	return m.MountSensitive(source, target, fsType, options, sensitiveMountOptions)
 }
 
+// isStagingTargetStale only applies to Windows; see smb_common_windows.go.
+func isStagingTargetStale(_ *mount.SafeFormatAndMount, _ string) bool {
+	return false
+}
+
 func CleanupSMBMountPoint(m *mount.SafeFormatAndMount, target string, extensiveMountCheck bool, volumeID string) error {
 	return mount.CleanupMountPoint(target, m, extensiveMountCheck)
 }

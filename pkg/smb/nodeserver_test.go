@@ -306,6 +306,80 @@ func TestNodeStageVolume(t *testing.T) {
 
 }
 
+// TestNodeStageVolumeStaleStagingTarget covers the Windows post-reboot case
+// where the staging symlink and SmbGlobalMapping survive on disk but the
+// mapping's credential is dead: the target reports as mounted, and before the
+// stale check NodeStageVolume returned early with a broken staging target.
+// The fake source carries the fake mounter's error_mount_sens marker so a
+// remount attempt is observable: reaching the mount path yields its error,
+// short-circuiting yields success.
+func TestNodeStageVolumeStaleStagingTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The fake mounter is replaced by the real winMounter on Windows;
+		// this test drives the stale branch through the fake mounter.
+		t.Skip("logic test runs with the linux/darwin fake mounter")
+	}
+	stdVolCap := csi.VolumeCapability{
+		AccessType: &csi.VolumeCapability_Mount{
+			Mount: &csi.VolumeCapability_MountVolume{},
+		},
+	}
+	// "false_is_likely" makes the fake mounter report the target as mounted.
+	stagingTarget := testutil.GetWorkDirPath("false_is_likely_stale_target", t)
+	req := &csi.NodeStageVolumeRequest{
+		VolumeId:          "vol_stale",
+		StagingTargetPath: stagingTarget,
+		VolumeCapability:  &stdVolCap,
+		VolumeContext:     map[string]string{sourceField: "//error_mount_sens_host/share"},
+		Secrets:           map[string]string{usernameField: "u", passwordField: "p"},
+	}
+
+	origStaleFunc := isStagingTargetStaleFunc
+	defer func() { isStagingTargetStaleFunc = origStaleFunc }()
+
+	tests := []struct {
+		desc        string
+		stale       bool
+		expectedErr error
+	}{
+		{
+			desc:        "staging target healthy: short-circuit preserved, no remount attempted",
+			stale:       false,
+			expectedErr: nil,
+		},
+		{
+			desc:  "staging target stale: cleaned up and remounted (remount attempt observable via fake mount error)",
+			stale: true,
+			expectedErr: status.Error(codes.Internal,
+				fmt.Sprintf("volume(vol_stale) mount \"//error_mount_sens_host/share\" on %q failed with fake MountSensitive: source error", stagingTarget)),
+		},
+	}
+
+	d := NewFakeDriver()
+	for _, test := range tests {
+		mounter, err := NewFakeMounter()
+		if err != nil {
+			t.Fatalf("failed to get fake mounter: %v", err)
+		}
+		d.mounter = mounter
+
+		staleCalledWith := ""
+		isStagingTargetStaleFunc = func(_ *mount.SafeFormatAndMount, target string) bool {
+			staleCalledWith = target
+			return test.stale
+		}
+
+		_, err = d.NodeStageVolume(context.Background(), req)
+		if test.expectedErr == nil {
+			assert.NoError(t, err, test.desc)
+		} else {
+			assert.EqualError(t, err, test.expectedErr.Error(), test.desc)
+		}
+		assert.Equal(t, stagingTarget, staleCalledWith, "stale check must run against the staging target: %s", test.desc)
+		assert.NoError(t, os.RemoveAll(stagingTarget))
+	}
+}
+
 func TestNodeGetInfo(t *testing.T) {
 	d := NewFakeDriver()
 

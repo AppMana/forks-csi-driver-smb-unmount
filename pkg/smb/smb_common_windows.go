@@ -35,6 +35,20 @@ func Mount(m *mount.SafeFormatAndMount, source, target, fsType string, mountOpti
 	return fmt.Errorf("could not cast to csi proxy class")
 }
 
+// stagingTargetValidator is implemented by the HostProcess winMounter only;
+// the csi-proxy (v1beta) mounter does not implement it, so stale detection is
+// a no-op there (the driver container cannot probe host paths in that mode).
+type stagingTargetValidator interface {
+	IsStagingTargetStale(target string) bool
+}
+
+func isStagingTargetStale(m *mount.SafeFormatAndMount, target string) bool {
+	if v, ok := m.Interface.(stagingTargetValidator); ok {
+		return v.IsStagingTargetStale(target)
+	}
+	return false
+}
+
 // CleanupSMBMountPoint - In windows CSI proxy call to umount is used to unmount the SMB.
 // The clean up mount point point calls is supposed for fix the corrupted directories as well.
 // For alpha CSI proxy integration, we only do an unmount.

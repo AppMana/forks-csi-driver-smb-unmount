@@ -158,6 +158,10 @@ func ContainsSpecialCharacter(word string) bool {
 	return strings.Contains(word, "\"") || strings.Contains(word, "`") || strings.Contains(word, ",")
 }
 
+// isStagingTargetStaleFunc is indirected so unit tests can simulate a stale
+// Windows staging target on any platform.
+var isStagingTargetStaleFunc = isStagingTargetStale
+
 // NodeStageVolume mount the volume to a staging path
 func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
@@ -294,8 +298,21 @@ func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRe
 		return nil, status.Errorf(codes.Internal, "Could not mount target %s: %v", targetPath, err)
 	}
 	if isDirMounted {
-		klog.V(2).Infof("NodeStageVolume: already mounted volume %s on target %s", volumeID, targetPath)
-	} else {
+		// On Windows the staging symlink and its SmbGlobalMapping survive a
+		// node reboot, but the mapping's credential does not: the target then
+		// looks mounted while every access fails. Detect that and remount
+		// instead of returning early with a broken staging target.
+		if isStagingTargetStaleFunc(d.mounter, targetPath) {
+			klog.Warningf("NodeStageVolume: staging target %s for volume %s exists but is stale (mapping did not survive a node reboot?), cleaning up and re-mounting", targetPath, volumeID)
+			if err := CleanupSMBMountPoint(d.mounter, targetPath, true /*extensiveMountCheck*/, volumeID); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to clean up stale staging target %s: %v", targetPath, err)
+			}
+			isDirMounted = false
+		} else {
+			klog.V(2).Infof("NodeStageVolume: already mounted volume %s on target %s", volumeID, targetPath)
+		}
+	}
+	if !isDirMounted {
 		if err = prepareStagePath(targetPath, d.mounter); err != nil {
 			return nil, fmt.Errorf("prepare stage path failed for %s with error: %v", targetPath, err)
 		}

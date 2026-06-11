@@ -134,6 +134,36 @@ func (mounter *winMounter) Unmount(target string) error {
 	return mounter.Rmdir(target)
 }
 
+// IsStagingTargetStale reports whether an existing SMB staging target (a
+// symlink to the remote path) is no longer usable. After a node reboot the
+// staging symlink and its SmbGlobalMapping survive on disk, but the mapping's
+// stored credential is dead: Get-SmbGlobalMapping still reports Status OK
+// while any access fails with "The user name or password is incorrect".
+// NodeStageVolume would otherwise see the surviving symlink, treat the volume
+// as already staged, and never reach SMBMount's mapping repair logic.
+func (mounter *winMounter) IsStagingTargetStale(target string) bool {
+	target = normalizeWindowsPath(target)
+	remotePath, err := smb.GetRemoteServerFromTarget(target)
+	if err != nil {
+		klog.Warningf("IsStagingTargetStale: could not resolve remote path for %s: %v, treating as stale", target, err)
+		return true
+	}
+	if isMapped, err := smb.IsSmbMapped(remotePath); err == nil && !isMapped {
+		klog.Warningf("IsStagingTargetStale: staging target %s exists but %s has no SmbGlobalMapping", target, remotePath)
+		return true
+	}
+	// A dead-credential mapping reports Status OK but fails on access. Stat
+	// through the staging symlink in the driver's own context: at boot there
+	// is no cached SMB session yet, so this surfaces the same auth failure
+	// containers would hit. With a live cached session the stat passes, which
+	// is fine - containers reach the share through the (healthy) mapping.
+	if _, err := os.Stat(target); err != nil {
+		klog.Warningf("IsStagingTargetStale: stat %s failed: %v", target, err)
+		return true
+	}
+	return false
+}
+
 // Unmount - Removes the directory - equivalent to unmount on Linux.
 func (mounter *winMounter) SMBUnmount(target, _ string) error {
 	target = normalizeWindowsPath(target)
