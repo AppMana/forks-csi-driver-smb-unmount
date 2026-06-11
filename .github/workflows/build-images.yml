@@ -1,0 +1,109 @@
+name: Build smbplugin images
+
+on:
+  push:
+    branches: [appmana-master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/appmana
+  IMAGE_NAME: smbplugin
+  # Bump the post number for every published change on appmana-master.
+  IMAGE_TAG: v1.20.1-appmana.post.1
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - name: Go vet and test
+        run: |
+          set -euo pipefail
+          go vet ./pkg/...
+          go test ./pkg/... -count=1
+
+  test-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - name: Go vet and test (windows-tagged packages)
+        run: |
+          $ErrorActionPreference = "Stop"
+          go vet ./pkg/...
+          if ($LASTEXITCODE -ne 0) { throw "go vet failed" }
+          go test ./pkg/... -count=1
+          if ($LASTEXITCODE -ne 0) { throw "go test failed" }
+
+  build-and-publish:
+    runs-on: ubuntu-latest
+    needs: [test-linux, test-windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker login ghcr
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build binaries
+        run: |
+          set -euo pipefail
+          make smb
+          make smb-windows
+
+      - name: Build and push images
+        run: |
+          set -euo pipefail
+          output_type="registry"
+          if [ "${{ github.event_name }}" != "push" ]; then
+            output_type="docker"
+          fi
+          image="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+          docker buildx build --pull --output=type="$output_type" --platform=linux/amd64 \
+            --provenance=false --sbom=false \
+            -t "${image}-linux-amd64" --build-arg ARCH=amd64 \
+            -f ./cmd/smbplugin/Dockerfile .
+
+          # COPY-only HostProcess Dockerfile: cross-buildable from linux.
+          docker buildx build --pull --output=type="$output_type" --platform=windows/amd64 \
+            --provenance=false --sbom=false \
+            -t "${image}-windows-hp" --build-arg ARCH=amd64 \
+            -f ./cmd/smbplugin/Dockerfile.WindowsHostProcess .
+
+      - name: Publish multi-platform manifest
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          image="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+          win_os_version="$(
+            docker buildx imagetools inspect --raw mcr.microsoft.com/windows/nanoserver:ltsc2022 |
+              jq -r '.manifests[0].platform["os.version"]'
+          )"
+
+          docker manifest create "$image" \
+            "${image}-linux-amd64" \
+            "${image}-windows-hp"
+          docker manifest annotate --os linux --arch amd64 "$image" "${image}-linux-amd64"
+          docker manifest annotate --os windows --arch amd64 --os-version "$win_os_version" "$image" "${image}-windows-hp"
+          docker manifest push --purge "$image"
+          docker buildx imagetools inspect "$image"

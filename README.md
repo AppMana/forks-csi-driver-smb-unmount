@@ -1,3 +1,35 @@
+# AppMana fork
+
+This is `github.com/AppMana/forks-csi-driver-smb-unmount`, a fork of
+[kubernetes-csi/csi-driver-smb](https://github.com/kubernetes-csi/csi-driver-smb).
+The `appmana-master` branch tracks upstream master plus:
+
+- `SMBUnmount`: remove the SmbGlobalMapping as a fallback when the
+  duplicate-mount check fails instead of silently leaking it (#1035 follow-up).
+- `NodeStageVolume`: detect and repair stale Windows staging targets after a
+  node reboot, where the staging symlink and SmbGlobalMapping survive on disk
+  but the mapping's credential is dead ("The user name or password is
+  incorrect" on every access while the mapping reports Status OK).
+- `SMBMount`: on `ERROR_SESSION_CREDENTIAL_CONFLICT`, sweep dead same-server
+  mappings and retry once (#1007).
+
+## Published images
+
+The `build-images.yml` workflow publishes a multi-platform manifest list on
+every push to `appmana-master`:
+
+- `ghcr.io/appmana/smbplugin:v1.20.1-appmana.post.1` — manifest list
+  (`linux/amd64` + `windows/amd64` ltsc2022 HostProcess)
+- `ghcr.io/appmana/smbplugin:v1.20.1-appmana.post.1-windows-hp` — Windows
+  HostProcess image (what the Helm chart's Windows DaemonSet pulls as
+  `<tag>-windows-hp`)
+- `ghcr.io/appmana/smbplugin:v1.20.1-appmana.post.1-linux-amd64` — Linux image
+
+Bump `IMAGE_TAG` in `.github/workflows/build-images.yml` for each published
+change.
+
+---
+
 # SMB CSI Driver for Kubernetes
 
 ![linux build status](https://github.com/kubernetes-csi/csi-driver-smb/actions/workflows/linux.yaml/badge.svg)
