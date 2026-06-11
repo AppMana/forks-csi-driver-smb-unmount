@@ -45,6 +45,17 @@ jobs:
           $ErrorActionPreference = "Stop"
           go vet ./pkg/...
           if ($LASTEXITCODE -ne 0) { throw "go vet failed" }
+
+          # pkg/smb tests construct the driver, which needs the csi-proxy
+          # pipes on Windows (same bootstrap as upstream windows.yaml).
+          Start-Job -Name CSIProxy -ScriptBlock {
+            Invoke-WebRequest https://acs-mirror.azureedge.net/csi-proxy/v1.1.1/binaries/csi-proxy-v1.1.1.tar.gz -OutFile csi-proxy.tar.gz;
+            tar -xvf csi-proxy.tar.gz
+            .\bin\csi-proxy.exe --kubelet-path $pwd --v=5
+          };
+          Start-Sleep -Seconds 30;
+          [System.IO.Directory]::GetFiles("\\.\\pipe\\") | Select-String csi-proxy | Write-Output
+
           go test ./pkg/... -count=1
           if ($LASTEXITCODE -ne 0) { throw "go test failed" }
 

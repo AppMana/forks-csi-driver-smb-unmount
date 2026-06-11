@@ -314,10 +314,11 @@ func TestNodeStageVolume(t *testing.T) {
 // remount attempt is observable: reaching the mount path yields its error,
 // short-circuiting yields success.
 func TestNodeStageVolumeStaleStagingTarget(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// The fake mounter is replaced by the real winMounter on Windows;
-		// this test drives the stale branch through the fake mounter.
-		t.Skip("logic test runs with the linux/darwin fake mounter")
+	if runtime.GOOS != "linux" {
+		// On Windows the fake mounter is replaced by the real winMounter; on
+		// darwin mount-utils cannot unmount during the cleanup step. The
+		// stale branch is platform-independent logic, tested on linux.
+		t.Skip("logic test runs with the linux fake mounter")
 	}
 	stdVolCap := csi.VolumeCapability{
 		AccessType: &csi.VolumeCapability_Mount{
