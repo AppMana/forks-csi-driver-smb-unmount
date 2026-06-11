@@ -112,7 +112,9 @@ func SelectStaleMappingsToServer(remotePath string, mappings []string, pathValid
 		if !strings.HasPrefix(strings.ToLower(path), serverPrefix) {
 			continue
 		}
-		if valid, err := pathValid(path); err == nil && valid {
+		// Only remove on a definitive negative probe; a probe error could be
+		// transient and removing a healthy mapping breaks its volumes.
+		if valid, err := pathValid(path); err != nil || valid {
 			continue
 		}
 		stale = append(stale, path)
