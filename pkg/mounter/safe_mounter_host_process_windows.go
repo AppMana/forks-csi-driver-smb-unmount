@@ -149,7 +149,10 @@ func (mounter *winMounter) SMBUnmount(target, _ string) error {
 				klog.V(2).Infof("skip unmount as there are other SMB mounts on the same remote server %s", remoteServer)
 			}
 		} else {
-			klog.Errorf("CheckForDuplicateSMBMounts(%s, %s) failed with %v", target, remoteServer, err)
+			klog.Warningf("CheckForDuplicateSMBMounts(%s, %s) failed with %v, removing mapping as fallback", target, remoteServer, err)
+			if err := smb.RemoveSmbGlobalMapping(remoteServer); err != nil {
+				klog.Errorf("RemoveSmbGlobalMapping(%s) failed with %v", target, err)
+			}
 		}
 	} else {
 		klog.Errorf("GetRemoteServerFromTarget(%s) failed with %v", target, err)
