@@ -36,7 +36,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/kubernetes-csi/csi-driver-smb/pkg/util"
 	azcache "sigs.k8s.io/cloud-provider-azure/pkg/cache"

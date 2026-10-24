@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -39,5 +40,5 @@ func main() {
 	if count < 100 {
 		panic("runtime CA bundle missing or unexpectedly small")
 	}
-	fmt.Printf("Verified %d runtime certificates\n", count)
+	log.Printf("Verified %d runtime certificates", count)
 }
