@@ -11,7 +11,9 @@
     "linux_package_tests": "passed",
     "windows_binary_cross_compile": "passed",
     "windows_native_tests": "pending CI",
-    "runtime_image_trust_check": "pending image build"
+    "runtime_image_trust_check": "passed local Docker build; 148 certificates; both invalidated root fingerprints absent",
+    "windows_test_cross_compile": "passed (compile only; native execution is a separate CI gate)",
+    "mapping_recovery_regression": "privacy true/false, success, unrelated error, successful retry, persistent conflict, cleanup failure; Windows test cross-compilation passed, native CI pending"
   },
   "scanner_findings": [
     {

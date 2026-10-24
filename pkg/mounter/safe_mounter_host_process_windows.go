@@ -130,19 +130,13 @@ func (mounter *winMounter) SMBMount(source, target, fsType string, mountOptions,
 		func(path string) (bool, error) { return filesystem.PathValid(context.Background(), path) },
 		smb.RemoveSmbGlobalMapping,
 		func(path, username, password string, requirePrivacy bool) error {
-			err := smb.NewSmbGlobalMapping(path, username, password, requirePrivacy)
-			if smb.IsCredentialSessionConflict(err) {
-				// Preserve AppMana's reboot recovery while honoring upstream's
-				// privacy setting and per-remote-path serialization.
-				pathValid := func(candidate string) (bool, error) {
-					return filesystem.PathValid(context.Background(), candidate)
-				}
-				if removeErr := smb.RemoveStaleMappingsToServer(path, pathValid); removeErr != nil {
-					klog.Warningf("RemoveStaleMappingsToServer(%s) failed: %v", path, removeErr)
-				}
-				err = smb.NewSmbGlobalMapping(path, username, password, requirePrivacy)
-			}
-			return err
+			return newSMBMappingWithRecovery(path, username, password, requirePrivacy,
+				smb.NewSmbGlobalMapping,
+				func(remote string) error {
+					return smb.RemoveStaleMappingsToServer(remote, func(candidate string) (bool, error) {
+						return filesystem.PathValid(context.Background(), candidate)
+					})
+				})
 		},
 	); err != nil {
 		return err
@@ -372,4 +366,18 @@ func (mounter *winMounter) GetAPIVersions() string {
 
 func (mounter *winMounter) CanSafelySkipMountPointCheck() bool {
 	return false
+}
+
+// newSMBMappingWithRecovery preserves the requested encryption policy on both
+// attempts. Callers hold the remote-path lock throughout mapping and recovery.
+func newSMBMappingWithRecovery(path, username, password string, requirePrivacy bool,
+	create func(string, string, string, bool) error, cleanup func(string) error) error {
+	err := create(path, username, password, requirePrivacy)
+	if !smb.IsCredentialSessionConflict(err) {
+		return err
+	}
+	if removeErr := cleanup(path); removeErr != nil {
+		klog.Warningf("RemoveStaleMappingsToServer(%s) failed: %v", path, removeErr)
+	}
+	return create(path, username, password, requirePrivacy)
 }

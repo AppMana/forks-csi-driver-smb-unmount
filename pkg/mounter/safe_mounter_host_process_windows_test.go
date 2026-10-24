@@ -176,3 +176,46 @@ func TestEnsureHostProcessSMBGlobalMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestMappingRecoveryPreservesPrivacyAndBoundsRetries(t *testing.T) {
+	conflict := fmt.Errorf("Multiple connections to a server or shared resource by the same user, using more than one user name, are not allowed")
+	denied := fmt.Errorf("access denied")
+	for _, privacy := range []bool{false, true} {
+		for _, tc := range []struct {
+			name                      string
+			first, second, cleanupErr error
+			wantCalls, wantCleanup    int
+			wantErr                   error
+		}{
+			{"success", nil, nil, nil, 1, 0, nil},
+			{"unrelated failure", denied, nil, nil, 1, 0, denied},
+			{"recovery", conflict, nil, nil, 2, 1, nil},
+			{"persistent conflict", conflict, conflict, nil, 2, 1, conflict},
+			{"cleanup failure", conflict, denied, denied, 2, 1, denied},
+		} {
+			t.Run(fmt.Sprintf("%s/privacy=%t", tc.name, privacy), func(t *testing.T) {
+				calls, cleanups := 0, 0
+				err := newSMBMappingWithRecovery(`\\server\share`, "user", "password", privacy,
+					func(path, user, password string, requirePrivacy bool) error {
+						calls++
+						if path != `\\server\share` || user != "user" || password != "password" || requirePrivacy != privacy {
+							t.Fatal("recovery changed mapping arguments or encryption policy")
+						}
+						if calls == 1 {
+							return tc.first
+						}
+						return tc.second
+					}, func(path string) error {
+						cleanups++
+						if path != `\\server\share` {
+							t.Fatal("cleanup changed server path")
+						}
+						return tc.cleanupErr
+					})
+				if err != tc.wantErr || calls != tc.wantCalls || cleanups != tc.wantCleanup {
+					t.Fatalf("got error=%v calls=%d cleanups=%d; want error=%v calls=%d cleanups=%d", err, calls, cleanups, tc.wantErr, tc.wantCalls, tc.wantCleanup)
+				}
+			})
+		}
+	}
+}
