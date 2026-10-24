@@ -82,7 +82,7 @@ func TestSelectStaleMappingsToServer(t *testing.T) {
 			expected:   []string{`\\server-b\share\pvc-other-server-dead`},
 		},
 		{
-			desc:       "unparseable remote path errors",
+			desc:       "unparsable remote path errors",
 			remotePath: `\\`,
 			expectErr:  true,
 		},
