@@ -21,8 +21,51 @@ package smb
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestCanonicalizeSMBRemotePath(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "normalizes separators case and trailing slash", in: `//SERVER/Share/`, want: `\\server\share`},
+		{name: "preserves normalized unc path", in: `\\server\share`, want: `\\server\share`},
+		{name: "strips repeated trailing backslashes", in: `\\SERVER\Share\\\\`, want: `\\server\share`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := CanonicalizeSMBRemotePath(test.in); got != test.want {
+				t.Fatalf("CanonicalizeSMBRemotePath(%q) = %q, want %q", test.in, got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseSMBGlobalMappingStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want SMBGlobalMappingStatus
+	}{
+		{name: "ok", in: "OK", want: SMBGlobalMappingStatusOK},
+		{name: "disconnected", in: "Disconnected", want: SMBGlobalMappingStatusDisconnected},
+		{name: "notfound explicit", in: "NotFound", want: SMBGlobalMappingStatusNotFound},
+		{name: "empty means notfound", in: "", want: SMBGlobalMappingStatusNotFound},
+		{name: "other state", in: "Reconnecting", want: SMBGlobalMappingStatusOther},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parseSMBGlobalMappingStatus(test.in); got != test.want {
+				t.Fatalf("parseSMBGlobalMappingStatus(%q) = %q, want %q", test.in, got, test.want)
+			}
+		})
+	}
+}
 
 func TestCheckForDuplicateSMBMounts(t *testing.T) {
 	tests := []struct {
@@ -55,5 +98,50 @@ func TestCheckForDuplicateSMBMounts(t *testing.T) {
 		if err != nil && test.expectedError != nil && err.Error() != test.expectedError.Error() {
 			t.Errorf("Expected error %v, got %v", test.expectedError, err)
 		}
+	}
+}
+
+func TestNewSmbGlobalMappingCmd(t *testing.T) {
+	tests := []struct {
+		name           string
+		requirePrivacy bool
+		expectedFlag   string
+		unexpectedFlag string
+	}{
+		{
+			name:           "require privacy true emits $true",
+			requirePrivacy: true,
+			expectedFlag:   "-RequirePrivacy $true",
+			unexpectedFlag: "-RequirePrivacy $false",
+		},
+		{
+			name:           "require privacy false emits $false",
+			requirePrivacy: false,
+			expectedFlag:   "-RequirePrivacy $false",
+			unexpectedFlag: "-RequirePrivacy $true",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newSmbGlobalMappingCmd(test.requirePrivacy)
+			if !strings.Contains(cmd, test.expectedFlag) {
+				t.Errorf("expected command to contain %q, got %q", test.expectedFlag, cmd)
+			}
+			if strings.Contains(cmd, test.unexpectedFlag) {
+				t.Errorf("expected command NOT to contain %q, got %q", test.unexpectedFlag, cmd)
+			}
+			// sanity: the New-SmbGlobalMapping invocation and env-var substitution must remain intact
+			for _, want := range []string{
+				"New-SmbGlobalMapping",
+				"$Env:smbuser",
+				"$Env:smbpassword",
+				"$Env:smbremotepath",
+			} {
+				if !strings.Contains(cmd, want) {
+					t.Errorf("expected command to contain %q, got %q", want, cmd)
+				}
+			}
+		})
 	}
 }

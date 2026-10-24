@@ -1,0 +1,40 @@
+{
+  "upstream_release": "v1.20.4",
+  "go": "1.27.3",
+  "required_fork_changes": [
+    "Windows stale staging target repair",
+    "Same-server dead credential mapping recovery",
+    "Probe errors never select mappings for cleanup",
+    "SMB unmount cleanup fallback"
+  ],
+  "validation": {
+    "linux_package_tests": "passed",
+    "windows_binary_cross_compile": "passed",
+    "windows_native_tests": "pending CI",
+    "runtime_image_trust_check": "pending image build"
+  },
+  "scanner_findings": [
+    {
+      "id": "GO-2025-3547",
+      "source": "https://github.com/kubernetes/kubernetes/issues/126587",
+      "assessment": "Cluster namespace-deletion/network-policy lifecycle advisory; driver does not run the namespace controller or kube-apiserver. Module-wide scanner report retained, not a claim about cluster immunity."
+    },
+    {
+      "id": "GO-2025-3521",
+      "source": "https://github.com/kubernetes/kubernetes/issues/130786",
+      "assessment": "In-tree kubelet gitRepo volume advisory; neither Linux nor Windows SMB driver dependency graph includes git_repo. Driver serves SMB CSI, not kubelet gitRepo volumes. Module-wide scanner report retained."
+    }
+  ],
+  "dependency_graph_check": {
+    "platforms": [
+      "linux",
+      "windows"
+    ],
+    "absent_packages": [
+      "k8s.io/kubernetes/pkg/volume/git_repo",
+      "k8s.io/kubernetes/pkg/controller/namespace",
+      "k8s.io/kubernetes/cmd/kube-apiserver"
+    ]
+  },
+  "publication": "not published"
+}

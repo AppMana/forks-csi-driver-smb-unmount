@@ -38,13 +38,12 @@ spec:
           effect: "NoSchedule"
       containers:
         - name: csi-provisioner
-          image: registry.k8s.io/sig-storage/csi-provisioner:v6.2.0
+          image: registry.k8s.io/sig-storage/csi-provisioner:v6.3.0
           args:
             - "-v=2"
             - "--csi-address=$(ADDRESS)"
             - "--leader-election"
             - "--leader-election-namespace=kube-system"
-            - "--feature-gates=VolumeAttributesClass=false"
             - "--extra-create-metadata=true"
             - "--retry-interval-max=30m"
           env:
@@ -65,7 +64,7 @@ spec:
               drop:
                 - ALL
         - name: csi-resizer
-          image: registry.k8s.io/sig-storage/csi-resizer:v2.1.0
+          image: registry.k8s.io/sig-storage/csi-resizer:v2.2.1
           args:
             - "-csi-address=$(ADDRESS)"
             - "-v=2"
@@ -90,7 +89,7 @@ spec:
               drop:
                 - ALL
         - name: liveness-probe
-          image: registry.k8s.io/sig-storage/livenessprobe:v2.18.0
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.19.0
           args:
             - --csi-address=/csi/csi.sock
             - --probe-timeout=3s
@@ -111,7 +110,7 @@ spec:
               drop:
                 - ALL
         - name: smb
-          image: gcr.io/k8s-staging-sig-storage/smbplugin:canary
+          image: registry.k8s.io/sig-storage/smbplugin:v1.20.4
           imagePullPolicy: IfNotPresent
           args:
             - "--v=5"

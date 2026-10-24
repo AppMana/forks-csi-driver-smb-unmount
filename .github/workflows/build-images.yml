@@ -13,7 +13,7 @@ env:
   REGISTRY: ghcr.io/appmana
   IMAGE_NAME: smbplugin
   # Bump the post number for every published change on appmana-master.
-  IMAGE_TAG: v1.20.1-appmana.post.1
+  IMAGE_TAG: v1.20.4-appmana.post.1
 
 jobs:
   test-linux:
@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.27.3
 
       - name: Go vet and test
         run: |
@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.27.3
 
       - name: Go vet and test (windows-tagged packages)
         run: |
@@ -67,7 +67,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.25.x
+          go-version: 1.27.3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -86,7 +86,7 @@ jobs:
           set -euo pipefail
           output_type="registry"
           if [ "${{ github.event_name }}" != "push" ]; then
-            output_type="docker"
+            output_type="cacheonly"
           fi
           image="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
 

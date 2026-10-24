@@ -29,7 +29,7 @@ include release-tools/build.make
 GIT_COMMIT := $(shell git rev-parse HEAD)
 REGISTRY ?= andyzhangx
 REGISTRY_NAME := $(shell echo $(REGISTRY) | sed "s/.azurecr.io//g")
-IMAGE_VERSION ?= v1.21.0
+IMAGE_VERSION ?= v1.20.4
 VERSION ?= latest
 # Use a custom version for E2E tests if we are testing in CI
 ifdef CI
@@ -44,7 +44,7 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 endif
 LDFLAGS = -X ${PKG}/pkg/smb.driverVersion=${IMAGE_VERSION} -X ${PKG}/pkg/smb.gitCommit=${GIT_COMMIT} -X ${PKG}/pkg/smb.buildDate=${BUILD_DATE}
 EXT_LDFLAGS = -s -w -extldflags "-static"
-E2E_HELM_OPTIONS ?= --set image.smb.repository=$(REGISTRY)/$(IMAGENAME) --set image.smb.tag=$(IMAGE_VERSION) --set controller.runOnControlPlane=true --set driver.labels.testlabel=testvalue
+E2E_HELM_OPTIONS ?= --set image.smb.repository=$(REGISTRY)/$(IMAGENAME) --set image.smb.tag=$(IMAGE_VERSION) --set controller.runOnControlPlane=true --set driver.labels.testlabel=testvalue --set linux.krb5CacheDirectory=/var/lib/kubelet/kerberos/ --set linux.krb5AutoConfig=true
 E2E_HELM_OPTIONS += ${EXTRA_HELM_OPTIONS}
 # Generate all combination of all OS, ARCH, and OSVERSIONS for iteration
 ALL_OS = linux windows
