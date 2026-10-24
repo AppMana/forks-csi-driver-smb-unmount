@@ -1,24 +1,24 @@
 image:
   baseRepo: registry.k8s.io/sig-storage
   smb:
-    repository: gcr.io/k8s-staging-sig-storage/smbplugin
-    tag: canary
+    repository: registry.k8s.io/sig-storage/smbplugin
+    tag: v1.20.4
     pullPolicy: IfNotPresent
   csiProvisioner:
     repository: /csi-provisioner
-    tag: v6.2.0
+    tag: v6.3.0
     pullPolicy: IfNotPresent
   csiResizer:
     repository: registry.k8s.io/sig-storage/csi-resizer
-    tag: v2.1.0
+    tag: v2.2.1
     pullPolicy: IfNotPresent
   livenessProbe:
     repository: /livenessprobe
-    tag: v2.18.0
+    tag: v2.19.0
     pullPolicy: IfNotPresent
   nodeDriverRegistrar:
     repository: /csi-node-driver-registrar
-    tag: v2.16.0
+    tag: v2.17.0
     pullPolicy: IfNotPresent
   csiproxy:
     repository: ghcr.io/kubernetes-sigs/sig-windows/csi-proxy
@@ -78,6 +78,9 @@ controller:
       requests:
         cpu: 10m
         memory: 20Mi
+  extraArgs:
+    csiProvisioner: []
+    csiResizer: []
   affinity: {}
   nodeSelector: {}
   tolerations:
@@ -117,6 +120,13 @@ linux:
   kubelet: /var/lib/kubelet
   krb5CacheDirectory: "" # directory for kerberos credential cache, empty string means default(/var/lib/kubelet/kerberos/)
   krb5Prefix: "" # prefix for kerberos credential cache, empty string means default(krb5cc_)
+  # When true (and krb5CacheDirectory is non-empty), an initContainer writes
+  # /etc/krb5.conf.d/90-csi-driver-smb.conf on every Linux node so that the
+  # in-kernel cifs.upcall picks up the per-uid credential cache produced by
+  # the driver. This lets users skip the manual node-provisioning step
+  # documented in docs/driver-parameters.md (Kerberos ticket support).
+  # Set to false if you manage /etc/krb5.conf(.d/) yourself.
+  krb5AutoConfig: false
   tolerations:
     - operator: "Exists"
   resources:
@@ -145,6 +155,10 @@ windows:
   dsName: csi-smb-node-win # daemonset name
   kubelet: 'C:\var\lib\kubelet'
   removeSMBMappingDuringUnmount: true
+  # only takes effect when useHostProcessContainers: true
+  # set to false to stop requiring SMB encryption on the global mapping (-RequirePrivacy $false on New-SmbGlobalMapping);
+  # this only removes the encryption requirement, it does not disable SMB signing or forbid negotiated encryption
+  requirePrivacyForGlobalMapping: true
   tolerations:
     - key: "node.kubernetes.io/os"
       operator: "Exists"

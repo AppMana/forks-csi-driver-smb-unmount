@@ -34,7 +34,7 @@ spec:
       hostNetwork: true
       initContainers:
         - name: init
-          image: gcr.io/k8s-staging-sig-storage/smbplugin:canary-windows-hp
+          image: registry.k8s.io/sig-storage/smbplugin:v1.20.4-windows-hp
           imagePullPolicy: IfNotPresent
           command:
             - "powershell.exe"
@@ -42,7 +42,7 @@ spec:
             - "New-Item -ItemType Directory -Path C:\\var\\lib\\kubelet\\plugins\\smb.csi.k8s.io\\ -Force"
       containers:
         - name: node-driver-registrar
-          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.16.0
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.17.0
           imagePullPolicy: IfNotPresent
           command:
             - "csi-node-driver-registrar.exe"
@@ -69,7 +69,7 @@ spec:
               cpu: 30m
               memory: 40Mi
         - name: smb
-          image: gcr.io/k8s-staging-sig-storage/smbplugin:canary-windows-hp
+          image: registry.k8s.io/sig-storage/smbplugin:v1.20.4-windows-hp
           imagePullPolicy: IfNotPresent
           command:
             - "smbplugin.exe"
@@ -79,6 +79,7 @@ spec:
             - --nodeid=$(KUBE_NODE_NAME)
             - --enable-windows-host-process=true
             - --remove-smb-mapping-during-unmount=true
+            - --require-privacy-for-global-mapping=true
           env:
             - name: CSI_ENDPOINT
               value: unix://C:\\var\\lib\\kubelet\\plugins\\smb.csi.k8s.io\\csi.sock

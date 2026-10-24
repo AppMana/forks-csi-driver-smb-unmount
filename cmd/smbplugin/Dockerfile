@@ -12,9 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS trust-check
+COPY hack/verify-runtime-trust.go /src/verify-runtime-trust.go
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /verify-runtime-trust /src/verify-runtime-trust.go
+
 FROM registry.k8s.io/build-image/debian-base:bookworm-v1.0.8
 
-RUN apt update && apt upgrade -y && apt-mark unhold libcap2 && clean-install ca-certificates cifs-utils util-linux e2fsprogs mount udev xfsprogs
+RUN apt update && apt upgrade -y && apt-mark unhold libcap2 && clean-install ca-certificates cifs-utils util-linux mount udev
+
+COPY --from=trust-check /verify-runtime-trust /tmp/verify-runtime-trust
+RUN /tmp/verify-runtime-trust /etc/ssl/certs/ca-certificates.crt && rm /tmp/verify-runtime-trust
 
 LABEL maintainers="andyzhangx"
 LABEL description="SMB CSI Driver"
